@@ -46,9 +46,10 @@ chrome.omnibox.onInputChanged.addListener(async (text, suggest) => {
         // Combine tabs and history for searching
         const allData = [...cachedTabData, ...cachedHistoryData];
 
-        console.log('All data count:', allData.length);
+        console.log('All data count:', allData.length, '(tabs:', cachedTabData.length, 'history:', cachedHistoryData.length, ')');
         const results = fuzzySearch(text, allData);
         console.log('Search results count:', results.length);
+        console.log('Top 3 results:', results.slice(0, 3).map(r => ({ title: r.title, score: r.score, isHistory: r.isHistory })));
 
         if (results.length > 0) {
             // Set the top match as the default suggestion

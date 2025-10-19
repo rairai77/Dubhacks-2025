@@ -31,24 +31,25 @@ export function fuzzySearch(query, data) {
             ...r.item,
         };
 
-        // Boost exact matches by giving them a much better score
+        // Check for exact/substring matches
         const titleLower = (item.title || '').toLowerCase();
         const urlLower = (item.url || '').toLowerCase();
         const textLower = (item.text || '').toLowerCase();
 
-        if (titleLower.includes(queryLower) || urlLower.includes(queryLower) || textLower.includes(queryLower)) {
+        const isExactTitleMatch = titleLower === queryLower;
+        const isSubstringMatch = titleLower.includes(queryLower) || urlLower.includes(queryLower) || textLower.includes(queryLower);
+
+        // Apply boosts for exact matches FIRST
+        if (isExactTitleMatch) {
+            // Exact matches in open tabs rank higher than exact matches in history
+            item.score = item.isHistory ? 0.01 : 0.001;
+        } else if (isSubstringMatch) {
             item.score = item.score * 0.5; // Boost exact substring matches
         }
 
-        // Exact match in title gets highest priority
-        if (titleLower === queryLower) {
-            item.score = 0.001; // Nearly perfect score
-        }
-
-        // Penalize history items by increasing their score (worse ranking)
-        // History items need stricter matching and rank lower
-        if (item.isHistory) {
-            item.score = Math.min(1.0, item.score * 1.5); // Make score 50% worse
+        // Penalize history items that aren't exact matches
+        if (item.isHistory && !isExactTitleMatch) {
+            item.score = Math.min(1.0, item.score * 2.0); // Make score 2x worse (stronger penalty)
         }
 
         return item;

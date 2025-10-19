@@ -2,11 +2,10 @@
 // Note: manifest needs the "history" permission.
 
 export async function getHistoryItems(query, { maxResults = 20 } = {}) {
-    if (!query) return [];
-
     try {
+        // Allow empty query to fetch recent history
         const results = await chrome.history.search({
-            text: query,
+            text: query || '',
             maxResults,
             startTime: 0
         });
