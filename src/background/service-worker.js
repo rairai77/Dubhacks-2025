@@ -2,65 +2,90 @@ import { fuzzySearch } from "../scripts/fuzzySearch.js";
 import { runPerTab, getTabContent } from "../scripts/tabs.js";
 import { getHistoryItems } from "../scripts/history.js";
 
+console.log('TabTrap service worker loaded');
+
 chrome.omnibox.setDefaultSuggestion({ description: "Search your tabs" });
 
 // Cache for omnibox session data
 let cachedTabData = null;
 let cachedHistoryData = null;
 
-// Reset cache when user starts typing (first input)
-chrome.omnibox.onInputStarted.addListener(() => {
+// Pre-fetch data when user starts typing (don't block on it)
+chrome.omnibox.onInputStarted.addListener(async () => {
+    console.log('Omnibox started, pre-fetching data');
     cachedTabData = null;
     cachedHistoryData = null;
+
+    try {
+        [cachedTabData, cachedHistoryData] = await Promise.all([
+            runPerTab((tab) => getTabContent(tab)),
+            getHistoryItems('', { maxResults: 20 })
+        ]);
+        console.log('Pre-fetch complete:', cachedTabData.length, 'tabs');
+    } catch (error) {
+        console.error('Pre-fetch error:', error);
+    }
 });
 
 // when typing
 chrome.omnibox.onInputChanged.addListener(async (text, suggest) => {
-    // Store the query so other parts of extension can read it
-    chrome.storage.local.set({ lastOmniboxQuery: text });
+    console.log('Omnibox input changed:', text);
 
-    // Get both tabs and history items (use cache if available)
-    if (!cachedTabData || !cachedHistoryData) {
-        [cachedTabData, cachedHistoryData] = await Promise.all([
-            runPerTab((tab) => getTabContent(tab)),
-            getHistoryItems(text, { maxResults: 20 })
-        ]);
-    }
+    try {
+        // Store the query so other parts of extension can read it
+        chrome.storage.local.set({ lastOmniboxQuery: text });
 
-    // Combine tabs and history for searching
-    const allData = [...cachedTabData, ...cachedHistoryData];
+        // If data isn't ready yet, show a loading message
+        if (!cachedTabData || !cachedHistoryData) {
+            console.log('Data not ready yet, showing loading message');
+            chrome.omnibox.setDefaultSuggestion({ description: "Loading tabs..." });
+            suggest([]);
+            return;
+        }
 
-    const results = fuzzySearch(text, allData);
+        // Combine tabs and history for searching
+        const allData = [...cachedTabData, ...cachedHistoryData];
 
-    if (results.length > 0) {
-        // Set the top match as the default suggestion
-        const topMatch = results[0];
-        const description = topMatch.isHistory
-            ? `[History] ${topMatch.title || topMatch.url}`
-            : `${topMatch.title || topMatch.url}`;
+        console.log('All data count:', allData.length);
+        const results = fuzzySearch(text, allData);
+        console.log('Search results count:', results.length);
 
-        chrome.omnibox.setDefaultSuggestion({ description });
+        if (results.length > 0) {
+            // Set the top match as the default suggestion
+            const topMatch = results[0];
+            const description = topMatch.isHistory
+                ? `[History] ${topMatch.title || topMatch.url}`
+                : `${topMatch.title || topMatch.url}`;
 
-        // Store the top match info for when user presses enter without selecting
-        chrome.storage.local.set({
-            topMatchId: topMatch.id,
-            topMatchIsHistory: topMatch.isHistory || false,
-            topMatchUrl: topMatch.url
-        });
+            chrome.omnibox.setDefaultSuggestion({ description });
 
-        // Show remaining matches as suggestions
-        const matches = results.slice(1, 7).map((t) => {
-            const description = t.isHistory
-                ? `[History] ${t.title || t.url}`
-                : `${t.title || t.url}`;
-            return {
-                content: String(t.id),
-                description
-            };
-        });
-        suggest(matches);
-    } else {
-        chrome.omnibox.setDefaultSuggestion({ description: "No matching tabs" });
+            // Store the top match info for when user presses enter without selecting
+            chrome.storage.local.set({
+                topMatchId: topMatch.id,
+                topMatchIsHistory: topMatch.isHistory || false,
+                topMatchUrl: topMatch.url
+            });
+
+            // Show remaining matches as suggestions
+            const matches = results.slice(1, 7).map((t) => {
+                const description = t.isHistory
+                    ? `[History] ${t.title || t.url}`
+                    : `${t.title || t.url}`;
+                return {
+                    content: String(t.id),
+                    description
+                };
+            });
+            console.log('Calling suggest with', matches.length, 'matches');
+            suggest(matches);
+        } else {
+            console.log('No results, showing no matching tabs');
+            chrome.omnibox.setDefaultSuggestion({ description: "No matching tabs" });
+            suggest([]);
+        }
+    } catch (error) {
+        console.error('Error in onInputChanged:', error);
+        chrome.omnibox.setDefaultSuggestion({ description: "Error: " + error.message });
         suggest([]);
     }
 });

@@ -4,7 +4,6 @@ export let runPerTab = async (f) => {
 };
 
 export let getTabContent = async (tab) => {
-    // Start with basic tab info
     const tabInfo = {
         id: tab.id,
         title: tab.title || '',
@@ -12,13 +11,15 @@ export let getTabContent = async (tab) => {
         text: ''
     };
 
-    // Only try to scrape content from http/https pages
+    // Only scrape content from http/https pages
     if (tab.url && (tab.url.startsWith('http://') || tab.url.startsWith('https://'))) {
         try {
             const results = await chrome.scripting.executeScript({
                 target: { tabId: tab.id },
                 func: () => {
-                    return document.body.innerText || '';
+                    // Get first 2000 chars, clean up whitespace
+                    const text = document.body.innerText || '';
+                    return text.substring(0, 2000).replace(/\s+/g, ' ').trim();
                 },
             });
             tabInfo.text = results[0].result || '';
