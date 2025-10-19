@@ -52,13 +52,32 @@ chrome.omnibox.onInputChanged.addListener(async (text, suggest) => {
         console.log('Top 3 results:', results.slice(0, 3).map(r => ({ title: r.title, score: r.score, isHistory: r.isHistory })));
 
         if (results.length > 0) {
+            // Helper function to highlight exact matches in text
+            const highlightMatch = (text, query) => {
+                if (!text || !query) return text;
+                const lowerText = text.toLowerCase();
+                const lowerQuery = query.toLowerCase();
+                const index = lowerText.indexOf(lowerQuery);
+
+                if (index === -1) return text;
+
+                // Build highlighted string with <match> tags
+                const before = text.substring(0, index);
+                const match = text.substring(index, index + query.length);
+                const after = text.substring(index + query.length);
+
+                return `${before}<match>${match}</match>${after}`;
+            };
+
             // Set the top match as the default suggestion
             const topMatch = results[0];
-            const description = topMatch.isHistory
-                ? `[History] ${topMatch.title || topMatch.url}`
-                : `${topMatch.title || topMatch.url}`;
+            const topTitle = topMatch.title || topMatch.url;
+            const topHighlighted = highlightMatch(topTitle, text);
+            const topDescription = topMatch.isHistory
+                ? `[History] ${topHighlighted}`
+                : topHighlighted;
 
-            chrome.omnibox.setDefaultSuggestion({ description });
+            chrome.omnibox.setDefaultSuggestion({ description: topDescription });
 
             // Store the top match info for when user presses enter without selecting
             chrome.storage.local.set({
@@ -69,9 +88,11 @@ chrome.omnibox.onInputChanged.addListener(async (text, suggest) => {
 
             // Show remaining matches as suggestions
             const matches = results.slice(1, 7).map((t) => {
+                const title = t.title || t.url;
+                const highlighted = highlightMatch(title, text);
                 const description = t.isHistory
-                    ? `[History] ${t.title || t.url}`
-                    : `${t.title || t.url}`;
+                    ? `[History] ${highlighted}`
+                    : highlighted;
                 return {
                     content: String(t.id),
                     description
