@@ -98,8 +98,8 @@ async function groupTabsWithAI(tabsData) {
     const prompt = `Analyze these browser tabs and group them into logical categories.
 Return a JSON array of groups, where each group has a "name" and "tabIds" array.
 No tabs should be in a group of their own - if tabs do not fit into another group they should go into a general catchall misc. group.
-Group names should be short for easy display, you may use both acronyms and abbreviations, DO NOT use slashes, "/", "&", or "\\"
-Tab group names should be one or two words maximum they do not need to be overly specific, be succinct
+Group names should be short for easy display, you may use both acronyms and abbreviations, 
+Tab group names should be short and two the point, no more than 4 tokens or roughly 2 words.
 
 Tabs:
 ${tabsData
@@ -117,6 +117,8 @@ Return ONLY valid JSON in this format:
     "color": "blue"
   }
 ]
+
+DO NOT use: "/", "&", "\\", "-"
 
 Available colors: blue, red, yellow, green, pink, purple, cyan, orange, grey`;
 
