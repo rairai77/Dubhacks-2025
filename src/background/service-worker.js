@@ -9,12 +9,16 @@ chrome.omnibox.setDefaultSuggestion({ description: "Search your tabs" });
 // Cache for omnibox session data
 let cachedTabData = null;
 let cachedHistoryData = null;
+let lastQuery = '';
+let pendingUpdate = false;
 
 // Pre-fetch data when user starts typing (don't block on it)
 chrome.omnibox.onInputStarted.addListener(async () => {
     console.log('Omnibox started, pre-fetching data');
     cachedTabData = null;
     cachedHistoryData = null;
+    lastQuery = '';
+    pendingUpdate = false;
 
     try {
         [cachedTabData, cachedHistoryData] = await Promise.all([
@@ -22,6 +26,14 @@ chrome.omnibox.onInputStarted.addListener(async () => {
             getHistoryItems('', { maxResults: 20 })
         ]);
         console.log('Pre-fetch complete:', cachedTabData.length, 'tabs');
+
+        // Trigger update if user is still waiting
+        if (pendingUpdate && lastQuery !== '') {
+            console.log('Data loaded, triggering update for:', lastQuery);
+            chrome.omnibox.setDefaultSuggestion({
+                description: `Search for "${lastQuery}"...`
+            });
+        }
     } catch (error) {
         console.error('Pre-fetch error:', error);
     }
@@ -30,19 +42,48 @@ chrome.omnibox.onInputStarted.addListener(async () => {
 // when typing
 chrome.omnibox.onInputChanged.addListener(async (text, suggest) => {
     console.log('Omnibox input changed:', text);
+    lastQuery = text;
 
     try {
         // Store the query so other parts of extension can read it
         chrome.storage.local.set({ lastOmniboxQuery: text });
 
-        // If data isn't ready yet, show a loading message
+        // If data isn't ready yet, show a loading message and mark pending
         if (!cachedTabData || !cachedHistoryData) {
             console.log('Data not ready yet, showing loading message');
+            pendingUpdate = true;
             chrome.omnibox.setDefaultSuggestion({ description: "Loading tabs..." });
             suggest([]);
+
+            // Poll for data and update when ready (with timeout)
+            const startTime = Date.now();
+            const pollInterval = setInterval(() => {
+                if (cachedTabData && cachedHistoryData) {
+                    clearInterval(pollInterval);
+                    console.log('Data ready, re-running search');
+                    // Manually trigger the search logic
+                    performSearch(text, suggest);
+                } else if (Date.now() - startTime > 5000) {
+                    // Timeout after 5 seconds
+                    clearInterval(pollInterval);
+                    console.log('Timeout waiting for data');
+                }
+            }, 100); // Check every 100ms
+
             return;
         }
 
+        performSearch(text, suggest);
+    } catch (error) {
+        console.error('Error in onInputChanged:', error);
+        chrome.omnibox.setDefaultSuggestion({ description: "Error: " + error.message });
+        suggest([]);
+    }
+});
+
+// Extract search logic into separate function
+function performSearch(text, suggest) {
+    try {
         // Combine tabs and history for searching
         const allData = [...cachedTabData, ...cachedHistoryData];
 
@@ -106,11 +147,11 @@ chrome.omnibox.onInputChanged.addListener(async (text, suggest) => {
             suggest([]);
         }
     } catch (error) {
-        console.error('Error in onInputChanged:', error);
+        console.error('Error in performSearch:', error);
         chrome.omnibox.setDefaultSuggestion({ description: "Error: " + error.message });
         suggest([]);
     }
-});
+}
 
 // when you press enter
 chrome.omnibox.onInputEntered.addListener(async (text) => {
