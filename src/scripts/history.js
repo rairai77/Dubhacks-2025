@@ -1,39 +1,27 @@
-// Small helper that searches history and normalizes items to the same shape
-// returned by getTabContent: { html, text, title, url }
+// Searches browser history and normalizes items to match tab data structure
 // Note: manifest needs the "history" permission.
 
-async function searchHistory(keywords, { maxResults = 100, startTime = 0 } = {}) {
-    if (!keywords) return [];
-    return new Promise((resolve, reject) => {
-        chrome.history.search(
-            { text: keywords, maxResults, startTime },
-            (results) => {
-                if (chrome.runtime.lastError) return reject(chrome.runtime.lastError);
-                resolve(results || []);
-            }
-        );
-    });
-}
+export async function getHistoryItems(query, { maxResults = 20 } = {}) {
+    if (!query) return [];
 
-function normalizeHistoryItem(item) {
-    return {
-        // history items don't contain page source/text, keep empty to match tab shape
-        html: "",
-        text: "",
-        title: item.title || "",
-        url: item.url || "",
-    };
-}
+    try {
+        const results = await chrome.history.search({
+            text: query,
+            maxResults,
+            startTime: 0
+        });
 
-async function runPerHistory(keywords, f, options = {}) {
-    const items = await searchHistory(keywords, options);
-    const normalized = items.map(normalizeHistoryItem);
-    const calls = normalized.map((n) => {
-        try {
-            return f(n);
-        } catch (err) {
-            return Promise.reject(err);
-        }
-    });
-    return Promise.all(calls);
+        // Normalize to match tab data structure
+        return (results || []).map((item) => ({
+            id: `history-${item.url}`, // Use URL as unique ID for history items
+            title: item.title || item.url || '',
+            url: item.url || '',
+            text: '', // History items don't have page content
+            isHistory: true, // Mark as history item
+            lastVisitTime: item.lastVisitTime || 0
+        }));
+    } catch (error) {
+        console.error('Failed to search history:', error);
+        return [];
+    }
 }

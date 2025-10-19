@@ -22,9 +22,20 @@ export function fuzzySearch(query, data) {
     });
 
     const results = fuse.search(query);
-    // Map Fuse.js results to cleaner output
-    return results.map((r) => ({
-        score: r.score,
-        ...r.item,
-    }));
+
+    // Map Fuse.js results and adjust scores for history items
+    return results.map((r) => {
+        const item = {
+            score: r.score,
+            ...r.item,
+        };
+
+        // Penalize history items by increasing their score (worse ranking)
+        // History items need stricter matching and rank lower
+        if (item.isHistory) {
+            item.score = Math.min(1.0, item.score * 1.5); // Make score 50% worse
+        }
+
+        return item;
+    }).sort((a, b) => a.score - b.score); // Re-sort by adjusted scores
 }

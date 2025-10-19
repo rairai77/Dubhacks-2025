@@ -4,6 +4,11 @@
     "version": "1.0",
     "description": "A tab finder",
     "omnibox": { "keyword": "tt" },
+    "icons": {
+        "16": "icon16.png",
+        "48": "icon16.png",
+        "128": "icon16.png"
+    },
     "background": {
         "service_worker": "src/background/service-worker.js",
         "type": "module"
@@ -11,7 +16,9 @@
     "action": {
         "default_popup": "src/popup.html",
         "default_icon": {
-            "16": "icon16.png"
+            "16": "icon16.png",
+            "48": "icon16.png",
+            "128": "icon16.png"
         }
     },
     "permissions": ["tabs", "scripting", "history", "storage", "tabGroups"],
