@@ -22,13 +22,28 @@ export function fuzzySearch(query, data) {
     });
 
     const results = fuse.search(query);
+    const queryLower = query.toLowerCase();
 
-    // Map Fuse.js results and adjust scores for history items
+    // Map Fuse.js results and adjust scores
     return results.map((r) => {
         const item = {
             score: r.score,
             ...r.item,
         };
+
+        // Boost exact matches by giving them a much better score
+        const titleLower = (item.title || '').toLowerCase();
+        const urlLower = (item.url || '').toLowerCase();
+        const textLower = (item.text || '').toLowerCase();
+
+        if (titleLower.includes(queryLower) || urlLower.includes(queryLower) || textLower.includes(queryLower)) {
+            item.score = item.score * 0.5; // Boost exact substring matches
+        }
+
+        // Exact match in title gets highest priority
+        if (titleLower === queryLower) {
+            item.score = 0.001; // Nearly perfect score
+        }
 
         // Penalize history items by increasing their score (worse ranking)
         // History items need stricter matching and rank lower
