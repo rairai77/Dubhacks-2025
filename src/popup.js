@@ -23,12 +23,22 @@ function hideContent() {
     contentDiv.style.display = 'none';
 }
 
+// Helper to add timeout to promises
+const withTimeout = (promise, timeoutMs) => {
+    return Promise.race([
+        promise,
+        new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout')), timeoutMs)
+        )
+    ]);
+};
+
 // Get tab data with limited content
 async function getTabsData() {
     const tabs = await chrome.tabs.query({});
-    const tabsData = [];
 
-    for (const tab of tabs) {
+    // Process tabs in parallel with Promise.allSettled to handle failures gracefully
+    const results = await Promise.allSettled(tabs.map(async (tab) => {
         const data = {
             id: tab.id,
             title: tab.title || '',
@@ -39,24 +49,32 @@ async function getTabsData() {
         // Only scrape content from http/https pages
         if (tab.url && (tab.url.startsWith('http://') || tab.url.startsWith('https://'))) {
             try {
-                const results = await chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
-                    func: () => {
-                        // Get first 100 characters of text content
-                        const text = document.body.innerText || '';
-                        return text.substring(0, 100).replace(/\s+/g, ' ').trim();
-                    }
-                });
+                // Add 1 second timeout per tab
+                const results = await withTimeout(
+                    chrome.scripting.executeScript({
+                        target: { tabId: tab.id },
+                        func: () => {
+                            // Get first 100 characters of text content
+                            const text = document.body.innerText || '';
+                            return text.substring(0, 100).replace(/\s+/g, ' ').trim();
+                        }
+                    }),
+                    1000 // 1 second timeout
+                );
                 data.content = results[0].result || '';
             } catch (error) {
-                // Skip tabs where we can't inject scripts
+                // Skip tabs where we can't inject scripts or timeout
+                console.log(`Failed to scrape tab ${tab.id}:`, error.message);
             }
         }
 
-        tabsData.push(data);
-    }
+        return data;
+    }));
 
-    return tabsData;
+    // Return only successful results
+    return results
+        .filter(r => r.status === 'fulfilled')
+        .map(r => r.value);
 }
 
 // Call Gemini API to group tabs
