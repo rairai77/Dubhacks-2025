@@ -93,19 +93,30 @@ function performSearch(text, suggest) {
         console.log('Top 3 results:', results.slice(0, 3).map(r => ({ title: r.title, score: r.score, isHistory: r.isHistory })));
 
         if (results.length > 0) {
+            // Helper function to escape XML special characters
+            const escapeXml = (text) => {
+                if (!text) return '';
+                return text
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&apos;');
+            };
+
             // Helper function to highlight exact matches in text
             const highlightMatch = (text, query) => {
-                if (!text || !query) return text;
+                if (!text || !query) return escapeXml(text);
                 const lowerText = text.toLowerCase();
                 const lowerQuery = query.toLowerCase();
                 const index = lowerText.indexOf(lowerQuery);
 
-                if (index === -1) return text;
+                if (index === -1) return escapeXml(text);
 
                 // Build highlighted string with <match> tags
-                const before = text.substring(0, index);
-                const match = text.substring(index, index + query.length);
-                const after = text.substring(index + query.length);
+                const before = escapeXml(text.substring(0, index));
+                const match = escapeXml(text.substring(index, index + query.length));
+                const after = escapeXml(text.substring(index + query.length));
 
                 return `${before}<match>${match}</match>${after}`;
             };
